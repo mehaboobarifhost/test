@@ -14,9 +14,14 @@ public class ApiBypassLogin {
 
     // --- Configuration Constants ---
     // NOTE: You must replace these placeholder values with your actual system details.
-    private static final String BASE_URL = "https://your-aprimo-dam-system.com"; // Your DAM web app URL
-    // NOTE: The exact login endpoint needs to be captured from your network logs (e.g., /api/auth/login)
-    private static final String LOGIN_API_ENDPOINT = BASE_URL + "/api/identity/login";
+    // Base URL is the root of the application.
+    private static final String BASE_URL = "https://testing.ttestin"; 
+    
+    // NOTE: The URL below is derived from your network logs (Request URL). 
+    // If this URL returns a 302 (redirect), you need to find the actual API endpoint 
+    // that accepts simple JSON credentials (username/password) without redirects.
+    private static final String LOGIN_API_ENDPOINT = BASE_URL + "/Login/Account/Login";
+    
     private static final String USERNAME = "your_username";
     private static final String PASSWORD = "your_password";
     private static final String START_PAGE_URL = BASE_URL + "/ui/main/dashboard"; // A page after login
@@ -45,8 +50,11 @@ public class ApiBypassLogin {
         credentials.put("password", PASSWORD);
         
         // Rest Assured setup and POST call
+        // NOTE: If the API endpoint is a form submission, you might need to use 
+        // contentType("application/x-www-form-urlencoded") and pass parameters 
+        // using .formParams(credentials) instead of .body(credentials).
         Response response = RestAssured.given()
-                .contentType("application/json")
+                .contentType("application/json") // Try JSON first
                 .body(credentials)
                 .log().method().log().uri() // Log the request details for debugging
                 .when()
@@ -68,7 +76,7 @@ public class ApiBypassLogin {
             for (Map.Entry<String, String> entry : allCookies.entrySet()) {
                 String cookieName = entry.getKey();
                 // Check for common Aprimo/Identity Server session cookie patterns
-                if (cookieName.startsWith("IDSRV.") || cookieName.contains("session") || cookieName.contains("aebaea")) {
+                if (cookieName.startsWith("IDSRV.") || cookieName.contains("session") || cookieName.contains("aebaea") || cookieName.contains("loginUserName")) {
                     essentialCookies.put(cookieName, entry.getValue());
                 }
             }

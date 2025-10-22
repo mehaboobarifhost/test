@@ -1,0 +1,31 @@
+
+# Authentication
+# Replace with your actual Client ID and Secret
+CLIENT_ID="YOUR_CLIENT_ID"
+CLIENT_SECRET="YOUR_CLIENT_SECRET"
+
+# Make the authentication request and store the token in a variable
+TOKEN=$(curl -s -H "Content-Type: application/json" -X POST \
+  --data "{ \"client_id\": \"$CLIENT_ID\", \"client_secret\": \"$CLIENT_SECRET\" }" \
+  https://xray.cloud.xpand-it.com/api/v2/authenticate)
+
+# The response is just the token string, so we need to remove the quotes
+TOKEN=$(echo $TOKEN | tr -d '"')
+
+# You can print the token to verify it was received
+echo "Authentication Token: $TOKEN"
+
+
+# upload
+# The project key where you want to create the tests
+PROJECT_KEY="YOUR_PROJECT_KEY" 
+
+# Path to your Cucumber feature file
+FEATURE_FILE_PATH="path/to/your/login.feature"
+
+# Make the API call to upload the file
+curl -H "Content-Type: text/plain" \
+     -X POST \
+     -H "Authorization: Bearer $TOKEN" \
+     --data-binary @"$FEATURE_FILE_PATH" \
+     "https://xray.cloud.xpand-it.com/api/v2/import/feature?projectKey=$PROJECT_KEY"

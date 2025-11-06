@@ -1,0 +1,88 @@
+import org.openqa.selenium.Cookie;
+
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.Test;
+
+import java.net.CookieStore;
+import java.net.HttpCookie;
+import java.util.Date;
+
+public class Yourtest {
+
+    private WebDriver driver;
+    private static final String BASE_URL = "";
+    // This is the URL we want to land on *after* login
+    private static final String APP_HOME_URL = "";
+
+    @BeforeMethod
+    public void setupTest() throws Exception {
+        System.out.println("Logging in programmatically...");
+
+        // 1. Call the STATIC helper method. This does the API login
+        // and stores the cookies in the AprimoLogin.cookieManager
+        String loginHandoffUrl = AprimoLogin.getLoginCallbackUrl();
+        // --- WE WILL NO LONGER USE 'loginHandoffUrl' ---
+
+        // 2. Create the driver instance
+        this.driver = new ChromeDriver();
+
+        // 3. Go to the base domain FIRST (CRITICAL STEP)
+        // This is required to set the cookie context
+        this.driver.get(BASE_URL);
+
+        // 4. Get cookies from the STATIC helper
+        CookieStore cookieStore = AprimoLogin.getCookieStore();
+
+        // 5. Loop, convert, and inject each cookie
+        for (HttpCookie httpCookie : cookieStore.getCookies()) {
+
+            Date expiryDate = null;
+            if (httpCookie.getMaxAge() != -1) {
+                expiryDate = new Date(System.currentTimeMillis() + httpCookie.getMaxAge() * 1000);
+            }
+
+            Cookie seleniumCookie = new Cookie(
+                    httpCookie.getName(),
+                    httpCookie.getValue(),
+                    httpCookie.getDomain(),
+                    httpCookie.getPath(),
+                    expiryDate,
+                    httpCookie.getSecure(),
+                    httpCookie.isHttpOnly()
+            );
+
+            this.driver.manage().addCookie(seleniumCookie);
+            System.out.println("Injected cookie: " + seleniumCookie.getName());
+        }
+
+        // 6. --- THE NEW SOLUTION ---
+        System.out.println("Cookies set. Navigating directly to App Home URL...");
+        this.driver.get(APP_HOME_URL);
+
+        System.out.println("Browser should now be logged in.");
+    }
+
+    @Test
+    public void testSomethingOnTheDashboard() {
+        System.out.println("Test is running, browser is logged in!");
+
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        System.out.println("Current URL: " + driver.getCurrentUrl());
+        // Add an assertion here to verify you are on the dashboard
+    }
+
+    @AfterMethod
+    public void tearDown() {
+        if (this.driver != null) {
+            driver.quit();
+        }
+    }
+}

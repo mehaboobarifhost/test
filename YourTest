@@ -8,14 +8,55 @@ import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 /**
- * This class contains the common function to create a fully logged-in
- * WebDriver instance by performing the hybrid API/UI login.
+ * This class contains common functions for creating logged-in sessions.
+ * It now manages both UI (WebDriver) and API (Token) login creation.
  */
 public class LoginManager {
 
-    // URLs are now part of this login process
-    private static final String BASE_URL = "https://novartis-sb1.aprimo.com";
-    private static final String APP_HOME_URL = "https://novartis-sb1.aprimo.com/MarketingOps/";
+    // --- Static token for API tests ---
+    private static String API_ACCESS_TOKEN;
+
+    // --- URLs for UI tests ---
+    private static final String BASE_URL = "https://company-sb1.aprimo.com";
+    private static final String APP_HOME_URL = "https://company-sb1.aprimo.com/MarketingOps/";
+
+    // ====================================================================
+    // API LOGIN METHODS
+    // ====================================================================
+
+    /**
+     * This is the common function (formerly setupSuite) that logs in
+     * via API and stores the token. Call this ONCE in your @BeforeAll.
+     *
+     * @param username The username for the API user.
+     * @param password The password for the API user.
+     * @throws Exception if login fails.
+     */
+    public static void initializeApiToken(String username, String password) throws Exception {
+        System.out.println("LoginManager: Getting API Access Token...");
+        
+        AprimoLogin loginSession = new AprimoLogin(username, password);
+        API_ACCESS_TOKEN = loginSession.getApiAccessToken();
+        
+        System.out.println("LoginManager: Token Acquired. Ready to run API tests.");
+    }
+
+    /**
+     * Helper method for your API Step Definitions to get the token.
+     *
+     * @return The stored API Access Token.
+     */
+    public static String getApiToken() {
+        if (API_ACCESS_TOKEN == null) {
+            throw new IllegalStateException("API Token was not initialized. Did @BeforeAll run?");
+        }
+        return API_ACCESS_TOKEN;
+    }
+
+
+    // ====================================================================
+    // UI LOGIN METHOD
+    // ====================================================================
 
     /**
      * This is the common function you can call from anywhere.
@@ -28,10 +69,9 @@ public class LoginManager {
      * @throws Exception if login or setup fails.
      */
     public static WebDriver createLoggedInBrowser(String username, String password) throws Exception {
-        System.out.println("LoginManager: Logging in programmatically...");
+        System.out.println("LoginManager: Logging in programmatically for UI...");
 
         // 1. CONFIGURE LOGIN
-        // You can also pass a proxy object here if needed
         AprimoLogin loginSession = new AprimoLogin(username, password);
 
         // 2. GET URL AND COOKIES
@@ -40,7 +80,7 @@ public class LoginManager {
 
         // 3. Create the driver instance
         WebDriver localDriver = new ChromeDriver();
-        localDriver.manage().timeouts().implicitlyWait(10, TimeUnit.SECONDS); // Good practice
+        localDriver.manage().timeouts().implicitlyWait(10, TimeUnit.SECONDS);
         
         // 4. Go to the base domain
         localDriver.get(BASE_URL);

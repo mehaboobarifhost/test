@@ -45,3 +45,4 @@ pipeline {
 }
 
 docker run --rm target/f1-tools-docker-images/selenium/node-chrome-debug:latest google-chrome --version
+    docker run -d -e SE_NODE_SESSION_TIMEOUT=5000 -e http_proxy="target:3128" -e https_proxy="target:3128" -e HTTP_PROXY="target:3128" -e HTTPS_PROXY="target:3128" -e no_proxy="" -p 4443:4443 --shm-size="6g" selenium/standalone-chrome:latest

@@ -1,68 +1,18 @@
-CONTAINER_ID=$(docker run -d -e SE_NODE_SESSION_TIMEOUT=5000 -e http_proxy='http://proxy-euie.aws.novartis.net:3128' -e https_proxy='http://proxy-euie.aws.novartis.net:3128' -e no_proxy='localhost,127.0.0.1,172.17.0.0/16' -p 4449:4443 --shm-size='6g' selenium/standalone-chrome:latest)
+echo "===== Cleaning up any container using port 4449 ====="
+docker ps -a --filter "publish=4449" -q | xargs -r docker rm -f
+
+echo "===== Starting new container ====="
+CONTAINER_ID=$(docker run -d -e SE_NODE_SESSION_TIMEOUT=5000 -e http_proxy='http://proxy-euie.aws.target.net:3128' -e https_proxy='http://proxy-euie.aws.target.net:3128' -e no_proxy='localhost,127.0.0.1,172.17.0.0/16' -p 4449:4443 --shm-size='6g' selenium/standalone-chrome:latest)
 
 echo "Container started: $CONTAINER_ID"
 sleep 15
 
 echo "===== Container status ====="
-docker ps -a | grep $CONTAINER_ID
+docker ps -a | grep "$CONTAINER_ID" || echo "Container NOT running — check logs below"
 
 echo "===== Grid health check ====="
-curl -s http://localhost:4449/wd/hub/status || echo "STATUS CHECK FAILED"
+curl -s http://localhost:4449/wd/hub/status || echo "STATUS CHECK FAILED — Grid not responding"
+echo ""
 
 echo "===== Container logs ====="
-docker logs $CONTAINER_ID
-
-
-
-options.addArguments("--proxy-server=target:3128");
-
-
-
-pipeline {
-    agent any
-
-    stages {
-        stage('Check Selenium Chrome Image Version') {
-            steps {
-                sh '''
-                    echo "Pulling current image..."
-                    docker pull target/f1-tools-docker-images/selenium-standalone-chrome:latest
-
-                    echo "Checking Chrome version inside the image..."
-                    docker run --rm target/f1-tools-docker-images/selenium-standalone-chrome:latest google-chrome --version
-
-                    echo "Checking available tags (if registry supports listing)..."
-                    docker images target/f1-tools-docker-images/selenium-standalone-chrome
-                '''
-            }
-        }
-    }
-}
-docker run -d -e SE_NODE_SESSION_TIMEOUT=5000 -e http_proxy='target:3128' -e https_proxy='target:3128' -e HTTP_PROXY='target:3128' -e HTTPS_PROXY='target:3128' -e no_proxy='localhost,127.0.0.1,172.17.0.0/16' -e NO_PROXY='localhost,127.0.0.1,172.17.0.0/16' -p 4443:4443 --shm-size='6g' selenium/standalone-chrome:latest
-
-pipeline {
-    agent any
-
-    stages {
-        stage('Check Available Selenium Images') {
-            steps {
-                sh '''
-                    echo "===== Checking selenium/node-chrome ====="
-                    docker pull target/f1-tools-docker-images/selenium/node-chrome:latest || echo "NOT FOUND: selenium/node-chrome"
-
-                    echo "===== Checking selenium/hub ====="
-                    docker pull target/f1-tools-docker-images/selenium/hub:latest || echo "NOT FOUND: selenium/hub"
-
-                    echo "===== Checking selenium/standalone-chrome (nested path) ====="
-                    docker pull target/f1-tools-docker-images/selenium/standalone-chrome:latest || echo "NOT FOUND: selenium/standalone-chrome"
-
-                    echo "===== Listing all local images pulled so far ====="
-                    docker images | grep -i selenium
-                '''
-            }
-        }
-    }
-}
-
-docker run --rm target/f1-tools-docker-images/selenium/node-chrome-debug:latest google-chrome --version
-    docker run -d -e SE_NODE_SESSION_TIMEOUT=5000 -e http_proxy="target:3128" -e https_proxy="target:3128" -e HTTP_PROXY="target:3128" -e HTTPS_PROXY="target:3128" -e no_proxy="" -p 4443:4443 --shm-size="6g" selenium/standalone-chrome:latest
+docker logs "$CONTAINER_ID" || echo "Could not fetch logs — container may not exist"

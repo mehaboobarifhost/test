@@ -43,3 +43,5 @@ pipeline {
         }
     }
 }
+
+docker run --rm target/f1-tools-docker-images/selenium/node-chrome-debug:latest google-chrome --version

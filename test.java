@@ -18,3 +18,4 @@ pipeline {
         }
     }
 }
+   curl -s -u <artifactory_user>:<artifactory_pass> "https://target/artifactory/api/docker/f1-tools-docker-images/v2/selenium-standalone-chrome/tags/list"

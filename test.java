@@ -18,4 +18,28 @@ pipeline {
         }
     }
 }
-   curl -s -u <artifactory_user>:<artifactory_pass> "https://target/artifactory/api/docker/f1-tools-docker-images/v2/selenium-standalone-chrome/tags/list"
+
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Check Available Selenium Images') {
+            steps {
+                sh '''
+                    echo "===== Checking selenium/node-chrome ====="
+                    docker pull target/f1-tools-docker-images/selenium/node-chrome:latest || echo "NOT FOUND: selenium/node-chrome"
+
+                    echo "===== Checking selenium/hub ====="
+                    docker pull target/f1-tools-docker-images/selenium/hub:latest || echo "NOT FOUND: selenium/hub"
+
+                    echo "===== Checking selenium/standalone-chrome (nested path) ====="
+                    docker pull target/f1-tools-docker-images/selenium/standalone-chrome:latest || echo "NOT FOUND: selenium/standalone-chrome"
+
+                    echo "===== Listing all local images pulled so far ====="
+                    docker images | grep -i selenium
+                '''
+            }
+        }
+    }
+}

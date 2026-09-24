@@ -1,3 +1,18 @@
+CONTAINER_ID=$(docker run -d -e SE_NODE_SESSION_TIMEOUT=5000 -e http_proxy='http://proxy-euie.aws.novartis.net:3128' -e https_proxy='http://proxy-euie.aws.novartis.net:3128' -e no_proxy='localhost,127.0.0.1,172.17.0.0/16' -p 4449:4443 --shm-size='6g' selenium/standalone-chrome:latest)
+
+echo "Container started: $CONTAINER_ID"
+sleep 15
+
+echo "===== Container status ====="
+docker ps -a | grep $CONTAINER_ID
+
+echo "===== Grid health check ====="
+curl -s http://localhost:4449/wd/hub/status || echo "STATUS CHECK FAILED"
+
+echo "===== Container logs ====="
+docker logs $CONTAINER_ID
+
+
 
 options.addArguments("--proxy-server=target:3128");
 

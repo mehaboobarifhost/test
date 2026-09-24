@@ -1,3 +1,8 @@
+
+options.addArguments("--proxy-server=target:3128");
+
+
+
 pipeline {
     agent any
 

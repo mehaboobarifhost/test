@@ -18,7 +18,7 @@ pipeline {
         }
     }
 }
-
+docker run -d -e SE_NODE_SESSION_TIMEOUT=5000 -e http_proxy='target:3128' -e https_proxy='target:3128' -e HTTP_PROXY='target:3128' -e HTTPS_PROXY='target:3128' -e no_proxy='localhost,127.0.0.1,172.17.0.0/16' -e NO_PROXY='localhost,127.0.0.1,172.17.0.0/16' -p 4443:4443 --shm-size='6g' selenium/standalone-chrome:latest
 
 pipeline {
     agent any

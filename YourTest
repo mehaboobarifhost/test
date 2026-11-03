@@ -1,12 +1,12 @@
 ```
-public static void addFileVersionForVersionCompare() throws InterruptedException, IOException {
+public static void uploadFileVersion() throws InterruptedException, IOException {
     //code for add new file version
     if (exec_container.equals("jenkins")) {
         CommonFunctions.setFileDetectorToJenkins();
     }
 
-    String originalFilePath = System.getProperty("user.dir") + "/src/test/java/com/xyz/dam/utils/Images/yyz-Testing_VersionCompare/yyz-Testing_C3 Glomerulopathy 2_VersionCompare_NoChange.docx";
-    String uploadedFilePath = /* KEEP YOUR ORIGINAL LINE 5444 HERE, unchanged */;
+    String originalFilePath = System.getProperty("user.dir") + "/src/test/java/com/xyz/dam/utils/Images/yyz-Testing_test.pdf";
+    String uploadedFilePath = /* KEEP YOUR ORIGINAL LINE HERE, unchanged */;
 
     try {
         Files.copy(Paths.get(originalFilePath), Paths.get(uploadedFilePath));
@@ -22,15 +22,12 @@ public static void addFileVersionForVersionCompare() throws InterruptedException
     driver.findElement(By.xpath("//button[@data-tracking='interaction:upload:upload-new']")).click();
     CommonFunctions.waitInMS(5);
 
-    // NO click on 'select-files': it opens the native file chooser, which Jenkins can't close
-    // and which makes Chrome block window.open afterwards. sendKeys on the file input is enough.
+    // No click on 'select-files': it opens the native file chooser, which Jenkins can't close
     WebElement fileInput = driver.findElement(By.xpath("//input[@type='file']"));
     ((JavascriptExecutor) driver).executeScript(
             "arguments[0].style.display='block'; arguments[0].style.visibility='visible';", fileInput);
     fileInput.sendKeys(uploadedFilePath);
 
     Log.info("File Uploaded ");
-    CommonFunctions.waitInMS(20);
 }
-
 ```

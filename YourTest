@@ -18,16 +18,39 @@ public static void uploadFileVersion() throws InterruptedException, IOException 
     Log.info("uploadedFilePath " + uploadedFilePath);
 
     WebDriver driver = DriverFactory.getInstance().getDriver();
+    JavascriptExecutor js = (JavascriptExecutor) driver;
 
+    // 1) Open the "Upload New" menu
     driver.findElement(By.xpath("//button[@data-tracking='interaction:upload:upload-new']")).click();
     CommonFunctions.waitInMS(5);
 
-    // No click on 'select-files': it opens the native file chooser, which Jenkins can't close
-    WebElement fileInput = driver.findElement(By.xpath("//input[@type='file']"));
-    ((JavascriptExecutor) driver).executeScript(
-            "arguments[0].style.display='block'; arguments[0].style.visibility='visible';", fileInput);
+    // 2) Block the native file chooser, but remember which <input type=file> the app tries to open
+    js.executeScript(
+        "if(!window.__origInputClick){window.__origInputClick=HTMLInputElement.prototype.click;}" +
+        "HTMLInputElement.prototype.click=function(){" +
+        "  if(this.type==='file'){" +
+        "    this.setAttribute('data-test-file-input','1');" +
+        "    if(!this.isConnected){this.style.display='none';document.body.appendChild(this);}" +
+        "    return;" +
+        "  }" +
+        "  return window.__origInputClick.apply(this,arguments);" +
+        "};");
+
+    // 3) Click "Upload files": the app sets up the upload, calls input.click(), and our override swallows it
+    driver.findElement(By.xpath("//li[@data-tracking='interaction:upload:select-files']")).click();
+    CommonFunctions.waitInMS(2);
+
+    // 4) Send the file to the input the app opened
+    List<WebElement> marked = driver.findElements(By.cssSelector("input[data-test-file-input='1']"));
+    Log.info("File inputs captured by the override: " + marked.size());
+    WebElement fileInput = !marked.isEmpty() ? marked.get(0)
+            : driver.findElement(By.cssSelector("body > input[type='file']"));
     fileInput.sendKeys(uploadedFilePath);
 
+    // 5) Restore the original click behaviour
+    js.executeScript("if(window.__origInputClick){HTMLInputElement.prototype.click=window.__origInputClick;}");
+
     Log.info("File Uploaded ");
+    CommonFunctions.waitInMS(20);
 }
 ```

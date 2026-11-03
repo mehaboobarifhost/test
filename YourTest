@@ -1,3 +1,29 @@
-LoggingPreferences logPrefs = new LoggingPreferences();
-logPrefs.enable(LogType.BROWSER, Level.ALL);
-options.setCapability("goog:loggingPrefs", logPrefs)
+```
+public static String getProjectIdFromProjectLink() {
+    WebDriver driver = DriverFactory.getInstance().getDriver();
+    WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(30));
+    By projectLink = By.xpath("//label[contains(text(),'Title (Project)')]/parent::div//a//div");
+
+    String mainWindow = driver.getWindowHandle();
+    Set<String> before = new HashSet<>(driver.getWindowHandles());
+
+    wait.until(ExpectedConditions.elementToBeClickable(projectLink)).click();
+
+    wait.until(d -> d.getWindowHandles().size() > before.size());
+
+    String newWindow = driver.getWindowHandles().stream()
+            .filter(h -> !before.contains(h))
+            .findFirst().orElseThrow();
+    driver.switchTo().window(newWindow);
+
+    // the new tab starts at about:blank, so wait for the real URL
+    wait.until(ExpectedConditions.urlContains("projectId="));
+    Matcher m = Pattern.compile("projectId=(\\d+)").matcher(driver.getCurrentUrl());
+    String projectId = m.find() ? m.group(1) : null;
+
+    driver.close();
+    driver.switchTo().window(mainWindow);
+    return projectId;
+}
+
+```

@@ -1,29 +1,73 @@
 ```
-public static String getProjectIdFromProjectLink() {
+public static String getProjectIdFromProjectLink() throws InterruptedException {
     WebDriver driver = DriverFactory.getInstance().getDriver();
-    WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(30));
-    By projectLink = By.xpath("//label[contains(text(),'Title (Project)')]/parent::div//a//div");
+    WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(60));
+    By linkBy = By.xpath("//label[contains(text(),'Title (Project)')]/parent::div//a");
+    Pattern p = Pattern.compile("projectId=(\\d+)");
 
+    Log.info("Started getProjectIdFromProjectLink");
+    WebElement link = wait.until(ExpectedConditions.visibilityOfElementLocated(linkBy));
+
+    // Diagnostics: what is this link really?
+    String href = link.getAttribute("href");
+    Log.info("Link href   : " + href);
+    Log.info("Link target : " + link.getAttribute("target"));
+    Log.info("Link HTML   : " + link.getAttribute("outerHTML"));
+
+    // Easiest path: the ID is already in the href, so no new tab is needed
+    if (href != null) {
+        Matcher hm = p.matcher(href);
+        if (hm.find()) {
+            Log.info("Project ID read from href: " + hm.group(1));
+            return hm.group(1);
+        }
+    }
+
+    // Otherwise click the link and wait for the new tab
     String mainWindow = driver.getWindowHandle();
     Set<String> before = new HashSet<>(driver.getWindowHandles());
+    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", link);
 
-    wait.until(ExpectedConditions.elementToBeClickable(projectLink)).click();
+    // Diagnostics: what did the page do after the click?
+    Thread.sleep(5000);
+    Log.info("Handles after click: " + driver.getWindowHandles().size()
+            + ", URL: " + driver.getCurrentUrl());
+    for (LogEntry e : driver.manage().logs().get(LogType.BROWSER)) {
+        Log.info("BROWSER LOG: " + e.getLevel() + " " + e.getMessage());
+    }
 
-    wait.until(d -> d.getWindowHandles().size() > before.size());
+    try {
+        wait.until(d -> d.getWindowHandles().size() > before.size());
+    } catch (TimeoutException e) {
+        // the app may have opened the project in the same tab
+        Matcher um = p.matcher(driver.getCurrentUrl());
+        if (um.find()) {
+            String id = um.group(1);
+            driver.navigate().back();
+            return id;
+        }
+        throw e;
+    }
 
     String newWindow = driver.getWindowHandles().stream()
-            .filter(h -> !before.contains(h))
-            .findFirst().orElseThrow();
+            .filter(h -> !before.contains(h)).findFirst().orElseThrow();
     driver.switchTo().window(newWindow);
-
-    // the new tab starts at about:blank, so wait for the real URL
     wait.until(ExpectedConditions.urlContains("projectId="));
-    Matcher m = Pattern.compile("projectId=(\\d+)").matcher(driver.getCurrentUrl());
-    String projectId = m.find() ? m.group(1) : null;
+    Log.info("Current Url : " + driver.getCurrentUrl());
+
+    Matcher m = p.matcher(driver.getCurrentUrl());
+    String id = m.find() ? m.group(1) : null;
 
     driver.close();
     driver.switchTo().window(mainWindow);
-    return projectId;
+    return id;
 }
+
+String id = getProjectIdFromProjectLink();
+ScenarioContext.setContext("PROJECT_ID", id);
+System.out.println("PROJECT_ID -" + id);
+CommonFunctions.waitInMS(5);
+
+options.addArguments("--disable-popup-blocking");
 
 ```

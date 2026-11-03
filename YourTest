@@ -1,73 +1,36 @@
 ```
-public static String getProjectIdFromProjectLink() throws InterruptedException {
-    WebDriver driver = DriverFactory.getInstance().getDriver();
-    WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(60));
-    By linkBy = By.xpath("//label[contains(text(),'Title (Project)')]/parent::div//a");
-    Pattern p = Pattern.compile("projectId=(\\d+)");
-
-    Log.info("Started getProjectIdFromProjectLink");
-    WebElement link = wait.until(ExpectedConditions.visibilityOfElementLocated(linkBy));
-
-    // Diagnostics: what is this link really?
-    String href = link.getAttribute("href");
-    Log.info("Link href   : " + href);
-    Log.info("Link target : " + link.getAttribute("target"));
-    Log.info("Link HTML   : " + link.getAttribute("outerHTML"));
-
-    // Easiest path: the ID is already in the href, so no new tab is needed
-    if (href != null) {
-        Matcher hm = p.matcher(href);
-        if (hm.find()) {
-            Log.info("Project ID read from href: " + hm.group(1));
-            return hm.group(1);
-        }
+public static void addFileVersionForVersionCompare() throws InterruptedException, IOException {
+    //code for add new file version
+    if (exec_container.equals("jenkins")) {
+        CommonFunctions.setFileDetectorToJenkins();
     }
 
-    // Otherwise click the link and wait for the new tab
-    String mainWindow = driver.getWindowHandle();
-    Set<String> before = new HashSet<>(driver.getWindowHandles());
-    ((JavascriptExecutor) driver).executeScript("arguments[0].click();", link);
-
-    // Diagnostics: what did the page do after the click?
-    Thread.sleep(5000);
-    Log.info("Handles after click: " + driver.getWindowHandles().size()
-            + ", URL: " + driver.getCurrentUrl());
-    for (LogEntry e : driver.manage().logs().get(LogType.BROWSER)) {
-        Log.info("BROWSER LOG: " + e.getLevel() + " " + e.getMessage());
-    }
+    String originalFilePath = System.getProperty("user.dir") + "/src/test/java/com/xyz/dam/utils/Images/yyz-Testing_VersionCompare/yyz-Testing_C3 Glomerulopathy 2_VersionCompare_NoChange.docx";
+    String uploadedFilePath = /* KEEP YOUR ORIGINAL LINE 5444 HERE, unchanged */;
 
     try {
-        wait.until(d -> d.getWindowHandles().size() > before.size());
-    } catch (TimeoutException e) {
-        // the app may have opened the project in the same tab
-        Matcher um = p.matcher(driver.getCurrentUrl());
-        if (um.find()) {
-            String id = um.group(1);
-            driver.navigate().back();
-            return id;
-        }
-        throw e;
+        Files.copy(Paths.get(originalFilePath), Paths.get(uploadedFilePath));
+        Log.info("File copied to: " + uploadedFilePath);
+    } catch (IOException e) {
+        Log.error("Failed to create directory: " + e.getMessage());
     }
+    Log.info("originalFilePath " + originalFilePath);
+    Log.info("uploadedFilePath " + uploadedFilePath);
 
-    String newWindow = driver.getWindowHandles().stream()
-            .filter(h -> !before.contains(h)).findFirst().orElseThrow();
-    driver.switchTo().window(newWindow);
-    wait.until(ExpectedConditions.urlContains("projectId="));
-    Log.info("Current Url : " + driver.getCurrentUrl());
+    WebDriver driver = DriverFactory.getInstance().getDriver();
 
-    Matcher m = p.matcher(driver.getCurrentUrl());
-    String id = m.find() ? m.group(1) : null;
+    driver.findElement(By.xpath("//button[@data-tracking='interaction:upload:upload-new']")).click();
+    CommonFunctions.waitInMS(5);
 
-    driver.close();
-    driver.switchTo().window(mainWindow);
-    return id;
+    // NO click on 'select-files': it opens the native file chooser, which Jenkins can't close
+    // and which makes Chrome block window.open afterwards. sendKeys on the file input is enough.
+    WebElement fileInput = driver.findElement(By.xpath("//input[@type='file']"));
+    ((JavascriptExecutor) driver).executeScript(
+            "arguments[0].style.display='block'; arguments[0].style.visibility='visible';", fileInput);
+    fileInput.sendKeys(uploadedFilePath);
+
+    Log.info("File Uploaded ");
+    CommonFunctions.waitInMS(20);
 }
-
-String id = getProjectIdFromProjectLink();
-ScenarioContext.setContext("PROJECT_ID", id);
-System.out.println("PROJECT_ID -" + id);
-CommonFunctions.waitInMS(5);
-
-options.addArguments("--disable-popup-blocking");
 
 ```

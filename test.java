@@ -2,16 +2,17 @@ pipeline {
 
     agent {
         ecs {
-            inheritFrom 'svn-core'
-            image ''
+
         }
     }
 
     parameters {
-        string(name: 'SOURCE_PROJECT', defaultValue: 'zzz', description: 'Old space key (tags like @zzz-123 and @TEST_zzz-123 are stripped)')
-        string(name: 'TARGET_PROJECT', defaultValue: 'yyy', description: 'New space key where Tests are created')
-        booleanParam(name: 'STRIP_REQ_TAGS', defaultValue: false, description: 'Also strip @REQ_zzz-nnn requirement-link tags (leave off if those stories still exist in zzz and you want the links)')
-        booleanParam(name: 'DRY_RUN', defaultValue: true, description: 'Validate and clean the zip only. Do NOT create anything in Jira/Xray')
+        string(name: 'SOURCE_PROJECT', defaultValue: 'yyy', description: 'Old space key (tags like @yyy-123 and @TEST_yyy-123 are stripped)')
+        string(name: 'TARGET_PROJECT', defaultValue: 'PCI', description: 'New space key where Tests are created')
+        string(name: 'FEATURES_DIR', defaultValue: 'src/test/resources/features', description: 'Folder in the repo that holds the .feature files (adjust to your framework)')
+        string(name: 'FEATURE_FILTER', defaultValue: '', description: 'Only import files whose path contains this text, e.g. UpdateContent. Leave BLANK to import ALL files')
+        booleanParam(name: 'STRIP_REQ_TAGS', defaultValue: false, description: 'Also strip @REQ_yyy-nnn requirement-link tags (leave off if those stories still exist in yyy and you want the links)')
+        booleanParam(name: 'DRY_RUN', defaultValue: true, description: 'Collect and clean only. Do NOT create anything in Jira/Xray')
     }
 
     options {
@@ -21,12 +22,12 @@ pipeline {
 
     environment {
         // Same proxy as your test pipeline - adjust if this job runs on a different agent
-        http_proxy  = "http://proxy-euie.aws.XYZ.net:3128"
-        https_proxy = "http://proxy-euie.aws.XYZ.net:3128"
-        HTTP_PROXY  = "http://proxy-euie.aws.XYZ.net:3128"
-        HTTPS_PROXY = "http://proxy-euie.aws.XYZ.net:3128"
-        NO_PROXY    = ".XYZ.net"
-        no_proxy    = ".XYZ.net"
+        http_proxy  = "http://proxy-euie.aws.xyz.net:3128"
+        https_proxy = "http://proxy-euie.aws.xyz.net:3128"
+        HTTP_PROXY  = "http://proxy-euie.aws.xyz.net:3128"
+        HTTPS_PROXY = "http://proxy-euie.aws.xyz.net:3128"
+        NO_PROXY    = ".xyz.net"
+        no_proxy    = ".xyz.net"
         XRAY_EU     = "https://eu.xray.cloud.getxray.app"
     }
 
@@ -42,37 +43,50 @@ pipeline {
                         error 'TARGET_PROJECT must differ from SOURCE_PROJECT'
                     }
                     echo "Source ${params.SOURCE_PROJECT}-*  ->  Target ${params.TARGET_PROJECT}-*   (DRY_RUN=${params.DRY_RUN})"
+                    echo "Features dir: ${params.FEATURES_DIR}   Filter: '${params.FEATURE_FILTER}' (blank = all)"
                 }
             }
         }
 
-        stage('Upload features zip') {
+        stage('Checkout and collect features') {
             steps {
-                script {
-                    // Pauses the build and shows an upload dialog. The file is stashed under the
-                    // parameter name, so unstash recreates it as features.zip in the workspace.
-                    input(message: 'Upload the zipped .feature files', parameters: [file(name: 'features.zip')])
-                }
-                unstash 'features.zip'
+                checkout scm   // needs "Pipeline script from SCM"; fails if the script was pasted into the job
+
+                sh '''
+                    set -e
+                    [ -d "$FEATURES_DIR" ] || { echo "ERROR: folder $FEATURES_DIR not found in the repo"; exit 1; }
+                    rm -rf work && mkdir -p work/in
+
+                    # List all .feature files, with paths relative to FEATURES_DIR
+                    ( cd "$FEATURES_DIR" && find . -type f -name '*.feature' | sort ) > work/all_files.txt
+                    if [ -n "$FEATURE_FILTER" ]; then
+                        grep -F -- "$FEATURE_FILTER" work/all_files.txt > work/selected.txt || true
+                    else
+                        cp work/all_files.txt work/selected.txt
+                    fi
+
+                    COUNT=$(wc -l < work/selected.txt)
+                    echo "Feature files selected: $COUNT"
+                    cat work/selected.txt
+                    [ "$COUNT" -gt 0 ] || { echo "ERROR: no .feature files matched the filter"; exit 1; }
+
+                    # Copy ONLY the selected files into work/in, keeping folder structure
+                    while IFS= read -r f; do
+                        mkdir -p "work/in/$(dirname "$f")"
+                        cp "$FEATURES_DIR/$f" "work/in/$f"
+                    done < work/selected.txt
+                '''
             }
         }
 
-        stage('Validate and clean features') {
+        stage('Clean tags') {
             steps {
                 sh '''
                     set -e
-                    rm -rf work && mkdir -p work/in
-                    unzip -tq features.zip
-                    unzip -q features.zip -d work/in
-
-                    COUNT=$(find work/in -name '*.feature' | wc -l)
-                    echo "Feature files found: $COUNT"
-                    [ "$COUNT" -gt 0 ] || { echo "ERROR: no .feature files in the zip"; exit 1; }
-
                     echo "Old-key tags before cleaning:"
                     grep -rEoh "@((TEST|REQ)_)?${SOURCE_PROJECT}-[0-9]+" work/in --include=*.feature | sort | uniq -c | sort -rn | head -20 || true
 
-                    # Strip old test tags so Xray creates NEW tests in the target space
+                    # Strip old test tags (in the copies only) so Xray creates NEW tests in the target space
                     find work/in -name '*.feature' -exec sed -i -E "s/@(TEST_)?${SOURCE_PROJECT}-[0-9]+//g" {} +
                     if [ "${STRIP_REQ_TAGS}" = "true" ]; then
                         find work/in -name '*.feature' -exec sed -i -E "s/@REQ_${SOURCE_PROJECT}-[0-9]+//g" {} +
@@ -82,9 +96,10 @@ pipeline {
                     [ "$LEFT" -eq 0 ] || { echo "ERROR: $LEFT old ${SOURCE_PROJECT}- tags remain"; exit 1; }
 
                     ( cd work/in && zip -qr ../clean_features.zip . )
+                    unzip -tq work/clean_features.zip
                     echo "Cleaned zip ready: work/clean_features.zip"
                 '''
-                archiveArtifacts artifacts: 'work/clean_features.zip', allowEmptyArchive: false
+                archiveArtifacts artifacts: 'work/clean_features.zip, work/selected.txt', allowEmptyArchive: false
             }
         }
 
@@ -124,7 +139,7 @@ pipeline {
             }
         }
 
-        stage('Export new yyy tests with tags') {
+        stage('Export new PCI tests with tags') {
             when { expression { return !params.DRY_RUN } }
             steps {
                 withCredentials([

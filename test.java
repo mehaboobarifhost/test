@@ -8,8 +8,11 @@ pipeline {
 
     parameters {
         string(name: 'SOURCE_PROJECT', defaultValue: 'yyy', description: 'Old space key (tags like @yyy-123 and @TEST_yyy-123 are stripped)')
-        string(name: 'TARGET_PROJECT', defaultValue: 'PCI', description: 'New space key where Tests are created')
-        string(name: 'FEATURES_DIR', defaultValue: 'src/test/resources/features', description: 'Folder in the repo that holds the .feature files (adjust to your framework)')
+        string(name: 'TARGET_PROJECT', defaultValue: 'ICP', description: 'New space key where Tests are created')
+        string(name: 'GIT_REPO_URL', defaultValue: 'https://bitbucketenterprise.aws.xyz.net/scm/citf/automation-testing.git', description: 'Framework repo clone URL (copy the real one from Bitbucket)')
+        string(name: 'GIT_BRANCH_NAME', defaultValue: 'yyyE_QUAL_2026.10_Suma_01', description: 'Branch that holds the features (name only, no refs/heads/)')
+        string(name: 'GIT_CREDENTIALS_ID', defaultValue: '', description: 'Jenkins credential ID for Bitbucket - same one your test job uses (Configure > Pipeline/SCM)')
+        string(name: 'FEATURES_DIR', defaultValue: 'src/test/resources/features', description: 'Folder in the repo that holds the .feature files (path from repo root, adjust to your framework)')
         string(name: 'FEATURE_FILTER', defaultValue: '', description: 'Only import files whose path contains this text, e.g. UpdateContent. Leave BLANK to import ALL files')
         booleanParam(name: 'STRIP_REQ_TAGS', defaultValue: false, description: 'Also strip @REQ_yyy-nnn requirement-link tags (leave off if those stories still exist in yyy and you want the links)')
         booleanParam(name: 'DRY_RUN', defaultValue: true, description: 'Collect and clean only. Do NOT create anything in Jira/Xray')
@@ -39,6 +42,9 @@ pipeline {
                     if (!params.TARGET_PROJECT?.trim() || !params.SOURCE_PROJECT?.trim()) {
                         error 'SOURCE_PROJECT and TARGET_PROJECT are required'
                     }
+                    if (!params.GIT_CREDENTIALS_ID?.trim()) {
+                        error 'GIT_CREDENTIALS_ID is required (use the Bitbucket credential ID from your test job)'
+                    }
                     if (params.TARGET_PROJECT.trim() == params.SOURCE_PROJECT.trim()) {
                         error 'TARGET_PROJECT must differ from SOURCE_PROJECT'
                     }
@@ -50,15 +56,29 @@ pipeline {
 
         stage('Checkout and collect features') {
             steps {
-                checkout scm   // needs "Pipeline script from SCM"; fails if the script was pasted into the job
+                // Explicit checkout (this job's script is pasted in Jenkins, so "checkout scm" is not available)
+                checkout([$class: 'GitSCM',
+                    branches: [[name: "*/${params.GIT_BRANCH_NAME}"]],
+                    userRemoteConfigs: [[url: params.GIT_REPO_URL, credentialsId: params.GIT_CREDENTIALS_ID]]
+                ])
 
                 sh '''
                     set -e
-                    [ -d "$FEATURES_DIR" ] || { echo "ERROR: folder $FEATURES_DIR not found in the repo"; exit 1; }
                     rm -rf work && mkdir -p work/in
 
-                    # List all .feature files, with paths relative to FEATURES_DIR
-                    ( cd "$FEATURES_DIR" && find . -type f -name '*.feature' | sort ) > work/all_files.txt
+                    if [ -f "$FEATURES_DIR" ]; then
+                        # FEATURES_DIR points to ONE .feature file
+                        case "$FEATURES_DIR" in *.feature) ;; *) echo "ERROR: $FEATURES_DIR is not a .feature file"; exit 1;; esac
+                        SRC_DIR=$(dirname "$FEATURES_DIR")
+                        echo "./$(basename "$FEATURES_DIR")" > work/all_files.txt
+                    elif [ -d "$FEATURES_DIR" ]; then
+                        # FEATURES_DIR is a folder: list all .feature files, relative to it
+                        SRC_DIR="$FEATURES_DIR"
+                        ( cd "$FEATURES_DIR" && find . -type f -name '*.feature' | sort ) > work/all_files.txt
+                    else
+                        echo "ERROR: $FEATURES_DIR not found in the repo (expected a folder or a .feature file)"; exit 1
+                    fi
+
                     if [ -n "$FEATURE_FILTER" ]; then
                         grep -F -- "$FEATURE_FILTER" work/all_files.txt > work/selected.txt || true
                     else
@@ -68,12 +88,12 @@ pipeline {
                     COUNT=$(wc -l < work/selected.txt)
                     echo "Feature files selected: $COUNT"
                     cat work/selected.txt
-                    [ "$COUNT" -gt 0 ] || { echo "ERROR: no .feature files matched the filter"; exit 1; }
+                    [ "$COUNT" -gt 0 ] || { echo "ERROR: no .feature files matched"; exit 1; }
 
                     # Copy ONLY the selected files into work/in, keeping folder structure
                     while IFS= read -r f; do
                         mkdir -p "work/in/$(dirname "$f")"
-                        cp "$FEATURES_DIR/$f" "work/in/$f"
+                        cp "$SRC_DIR/$f" "work/in/$f"
                     done < work/selected.txt
                 '''
             }
@@ -107,8 +127,8 @@ pipeline {
             when { expression { return !params.DRY_RUN } }
             steps {
                 withCredentials([
-                    string(credentialsId: 'sampleclientid',     variable: 'jira_tv_client_id'),
-                    string(credentialsId: 'samplesecret', variable: 'jira_tv_client_secret')
+                    string(credentialsId: 'clientid',     variable: 'jira_tv_client_id'),
+                    string(credentialsId: 'clientsecret', variable: 'jira_tv_client_secret')
                 ]) {
                     sh '''
                         set +x
@@ -139,12 +159,12 @@ pipeline {
             }
         }
 
-        stage('Export new PCI tests with tags') {
+        stage('Export new ICP tests with tags') {
             when { expression { return !params.DRY_RUN } }
             steps {
                 withCredentials([
-                    string(credentialsId: 'sampleclientid',     variable: 'jira_tv_client_id'),
-                    string(credentialsId: 'samplesecret', variable: 'jira_tv_client_secret')
+                    string(credentialsId: 'clientid',     variable: 'jira_tv_client_id'),
+                    string(credentialsId: 'clientsecret', variable: 'jira_tv_client_secret')
                 ]) {
                     // Non-fatal: the import already succeeded. This only produces tagged features for your repo.
                     catchError(buildResult: 'SUCCESS', stageResult: 'UNSTABLE') {

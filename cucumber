@@ -8,7 +8,7 @@
  * always creates NEW tests. tag_mapping.csv records the old tags per scenario.
  *
  * Usage:
- *   node features_to_xray_csv.js --features-dir <folder> --out <out folder> [--project ICP] [--filter TEXT]
+ *   node features_to_xray_csv.js --features-dir <folder> --out <out folder> [--project ICP] [--filter TEXT] [--drop-key-labels]
  *
  * Output (in --out): xray_import.csv, xray_import_config.json, tag_mapping.csv
  * No npm packages needed (Node 14+).
@@ -84,9 +84,12 @@ function parseFeature(file) {
   return { scenarios: scenarios.filter((s) => s.kind !== 'bg'), background };
 }
 
-// Tags -> Jira labels. Old issue-key tags are dropped; spaces are not allowed in labels.
+// Tags -> Jira labels (spaces are not allowed in labels). Old issue-key tags such as
+// @FUS-10771 are KEPT as labels (e.g. FUS-10771) so the new test can be traced back to the
+// old one. Pass --drop-key-labels to leave them out.
 const KEY_TAG = /^@?(TEST_|REQ_)?[A-Z][A-Z0-9]+-\d+$/i;
-const toLabels = (tags) => [...new Set(tags.filter((t) => !KEY_TAG.test(t))
+const dropKeyLabels = process.argv.includes('--drop-key-labels');
+const toLabels = (tags) => [...new Set(tags.filter((t) => !(dropKeyLabels && KEY_TAG.test(t)))
   .map((t) => t.replace(/^@/, '').replace(/\s+/g, '_')).filter(Boolean))];
 
 const definition = (sc) => sc.steps.join('\n') + (sc.examples.length ? '\n\n' + sc.examples.join('\n') : '');

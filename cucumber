@@ -46,7 +46,7 @@ function walk(dir) {
 function parseFeature(file) {
   const lines = fs.readFileSync(file, 'utf8').replace(/^﻿/, '').split(/\r?\n/);
   const scenarios = [];
-  let cur = null, pendingTags = [], inDoc = false, inExamples = false, background = false;
+  let cur = null, pendingTags = [], featureTags = [], inDoc = false, inExamples = false, background = false;
   for (const raw of lines) {
     const line = raw.trim();
     if (inDoc) {
@@ -56,7 +56,7 @@ function parseFeature(file) {
     }
     if (!line || line.startsWith('#')) continue;
     if (line.startsWith('@')) { pendingTags.push(...line.split(/\s+/)); continue; }
-    if (/^Feature\s*:/i.test(line)) { pendingTags = []; continue; }
+    if (/^Feature\s*:/i.test(line)) { featureTags = pendingTags; pendingTags = []; continue; }
     if (/^Background\s*:/i.test(line)) {
       background = true;
       cur = { name: '(background)', kind: 'bg', tags: [], steps: [], examples: [] };
@@ -65,13 +65,13 @@ function parseFeature(file) {
     }
     const m = line.match(SCEN_RE);
     if (m) {
-      cur = { name: m[2].trim(), kind: titleCase(m[1]), tags: pendingTags, steps: [], examples: [] };
+      cur = { name: m[2].trim(), kind: titleCase(m[1]), tags: featureTags.concat(pendingTags), steps: [], examples: [] };
       scenarios.push(cur);
       pendingTags = []; inExamples = false;
       continue;
     }
     if (/^(Examples|Scenarios)\s*:/i.test(line) && cur) {
-      inExamples = true; cur.examples.push('Examples:'); pendingTags = [];
+      inExamples = true; cur.examples.push('Examples:'); cur.tags = cur.tags.concat(pendingTags); pendingTags = [];
       continue;
     }
     if (!cur) continue;
@@ -83,6 +83,11 @@ function parseFeature(file) {
   }
   return { scenarios: scenarios.filter((s) => s.kind !== 'bg'), background };
 }
+
+// Tags -> Jira labels. Old issue-key tags are dropped; spaces are not allowed in labels.
+const KEY_TAG = /^@?(TEST_|REQ_)?[A-Z][A-Z0-9]+-\d+$/i;
+const toLabels = (tags) => [...new Set(tags.filter((t) => !KEY_TAG.test(t))
+  .map((t) => t.replace(/^@/, '').replace(/\s+/g, '_')).filter(Boolean))];
 
 const definition = (sc) => sc.steps.join('\n') + (sc.examples.length ? '\n\n' + sc.examples.join('\n') : '');
 
@@ -106,25 +111,25 @@ for (const f of files) {
   for (const sc of scenarios) {
     n++;
     if (!sc.steps.length) warnings.push(`${rel}: scenario "${sc.name}" has no steps`);
-    rows.push([n, '', 'Cucumber', sc.name, definition(sc)]);
+    rows.push([n, '', 'Cucumber', sc.name, definition(sc), toLabels(sc.tags).join(';')]);
     mapping.push([rel, sc.name, sc.kind, sc.tags.join(' ')]);
   }
 }
 
 const BOM = '﻿';
-const header = ['Issue Id', 'Issue key', 'Test type', 'Test Summary', 'Gherkin definition'];
+const header = ['Issue Id', 'Issue key', 'Test type', 'Test Summary', 'Gherkin definition', 'Labels'];
 fs.writeFileSync(path.join(outDir, 'xray_import.csv'),
   BOM + [row(header, ';'), ...rows.map((r) => row(r, ';'))].join('\r\n') + '\r\n', 'utf8');
 fs.writeFileSync(path.join(outDir, 'tag_mapping.csv'),
   BOM + [row(['feature file', 'scenario', 'type', 'original tags'], ','), ...mapping.map((r) => row(r, ','))].join('\r\n') + '\r\n', 'utf8');
 
 const fields = [['Xray', '__xray_testId'], ['Native', '__issue_key'], ['Xray', 'xray_testtype'],
-  ['Native', 'summary'], ['Xray', 'xray_gherkin_def']];
+  ['Native', 'summary'], ['Xray', 'xray_gherkin_def'], ['Native', 'labels']];
 const cfg = {
   'config.encoding': 'UTF-8', 'config.delimiter': ';', 'config.project.from.csv': false,
   'config.project.key': project, 'config.list.delimiter': ';',
   'config.date.format': 'DD/MM/YYYY HH:mm', 'config.create.test.repository.folders': false,
-  'config.field.mappings': fields.map(([group, id], i) => ({ 'column.index': i, 'jira.field': { group, id, type: 'string' } })),
+  'config.field.mappings': fields.map(([group, id], i) => ({ 'column.index': i, 'jira.field': { group, id, type: id === 'labels' ? 'array' : 'string' } })),
 };
 fs.writeFileSync(path.join(outDir, 'xray_import_config.json'), JSON.stringify(cfg, null, 4), 'utf8');
 
